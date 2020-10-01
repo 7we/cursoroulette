@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+
+<!--
+
+    Cursoroulette
+
+    Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+    eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut
+    enim ad minim veniam, quis nostrud exercitation ullamco laboris
+    nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor
+    in reprehenderit in voluptate velit esse cillum dolore eu fugiat
+    nulla pariatur. Excepteur sint occaecat cupidatat non proident,
+    sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+-->
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cursoroulette</title>
+
+    <meta property="og:title" content="Cursoroulette"/>
+    <meta property="og:description" content="A simple yet hectic game."/>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Inter&display=swap" rel="stylesheet">
+
+    <!-- This is the styling the page goes under to look good -->
+    <style>
+        html, body {
+            padding: 0;
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- This tag shows to browsers that block JavaScript (which is required!) -->
+    <noscript>
+        Woah there! It seems like you aren't using JavaScript! JavaScript is required
+        to run this page <a href="https://www.enable-javascript.com/">Learn more</a>
+    </noscript>
+
+    <!-- This div renders the entire game inside it -->
+    <canvas id="game"></canvas>
+
+    <!-- This is the game script where things are run -->
+    <script>
+        let isOpen = false;
+        const connection = new WebSocket("ws://2.tcp.ngrok.io:11891");
+
+        connection.onopen = () => {
+            isOpen = true;
+            closedTicks = 0;
+        };
+
+        connection.onclose = () => {
+            isOpen = false;
+            closedTicks = 0;
+        };
+
+        connection.onerror = () => {};
+
+        let score = 0;
+        let name;
+        let scores = [];
+        let positions = [];
+
+        let title = "";
+        let subtitle = "";
+        let titleTicks = 0;
+
+        const drawDot = (ctx, w, h, x, y, s) => {
+            ctx.fillRect(x / 32767 * w - s / 2, y / 32767 * h - s / 2, s, s);
+        }
+
+        connection.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.name) {
+                name = data.name;
+                return;
+            }
+
+            if (data.scores) {
+                scores = data.scores;
+                console.log(scores);
+                score = scores.filter((value => value.name === name))[0].score;
+                return;
+            }
+
+            if (data.title) {
+                title = data.title;
+                subtitle = data.subtitle;
+                titleTicks = 300;
+                return;
+            }
+
+            positions = data;
+        };
+
+        const canvas = document.getElementById("game");
+        let width = canvas.width;
+        let height = canvas.height;
+        const ctx = canvas.getContext("2d");
+
+        const red = "#eb4236";
+        const blue = "#366ceb";
+
+        let lastRender = 0;
+        let closedTicks = 0;
+
+        const update = (progress) => {
+            if (!isOpen || closedTicks >= 2000) {
+                positions = [];
+                closedTicks += progress;
+                return;
+            }
+
+            if (titleTicks > 0) titleTicks--;
+        };
+
+        const draw = () => {
+            canvas.width  = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            width = canvas.width;
+            height = canvas.height;
+
+            if (width > height) {
+                ctx.fillStyle = red;
+                ctx.fillRect(0, 0, width / 2, height);
+
+                ctx.fillStyle = blue;
+                ctx.fillRect(width / 2, 0, width, height);
+
+                ctx.fillStyle = "white";
+                for (let position of positions) {
+                    drawDot(ctx, width, height, position.x, position.y, position.s + 4);
+                }
+            } else {
+                ctx.fillStyle = red;
+                ctx.fillRect(0, 0, width, height / 2);
+
+                ctx.fillStyle = blue;
+                ctx.fillRect(0, height / 2, width, height);
+
+                for (let position of positions) {
+
+                }
+            }
+
+            if (!isOpen) {
+                ctx.fillStyle = "white";
+                ctx.font = "4rem 'Inter'";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "bottom";
+                let isTimedOut = closedTicks >= 2000;
+                ctx.fillText(isTimedOut ? "Can't connect to server!" : "Connecting...", width / 2, height / 2);
+                ctx.font = "1rem 'Inter'";
+                ctx.textBaseline = "hanging";
+                if (isTimedOut) ctx.fillText("Try reloading the page!", width / 2, height / 2);
+                return;
+            }
+
+            if (titleTicks > 0) {
+                ctx.fillStyle = "white";
+                ctx.font = "4rem 'Inter'";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "bottom";
+                ctx.fillText(title, width / 2, height / 2);
+                ctx.font = "1rem 'Inter'";
+                ctx.textBaseline = "hanging";
+                ctx.fillText(subtitle, width / 2, height / 2);
+            }
+
+            // render name
+            if (name) {
+                ctx.fillStyle = "white";
+                ctx.font = "1.5rem 'Inter'";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "bottom";
+                ctx.fillText(name, width / 2, height - 10);
+            }
+
+            ctx.fillStyle = "white";
+            ctx.font = "1.5rem 'Inter'";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "bottom";
+
+            ctx.fontWeight = "500";
+            ctx.fillText("Leaderboard", width - 175, 50);
+            ctx.fontWeight = "400";
+
+            const namedScores = scores
+                .sort((a, b) => a.score < b.score)
+                .map((value) => `${value.name}: ${value.score}`)
+                .splice(0, 9);
+            let offset = 35;
+
+            for (let namedScore of namedScores) {
+                ctx.fillText(
+                    namedScore, width - 175, 50 + offset
+                );
+                offset += 35;
+            }
+
+            // render own score
+            ctx.fillStyle = "white";
+            ctx.font = "3rem 'Inter'";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "hanging";
+            ctx.fillText(score, width / 2, 0);
+        };
+
+        let lastSentPosition = [0, 0];
+
+        canvas.onmousemove = (event) => {
+            if (!isOpen) return;
+            if (Math.abs(lastSentPosition[0] - event.clientX) + Math.abs(lastSentPosition[1] - event.clientY) < 4) return;
+            lastSentPosition = [event.clientX, event.clientY];
+            connection.send([Math.floor(event.clientX / width * 32767), Math.floor(event.clientY / height * 32767)]);
+        };
+
+        const loop = (time) => {
+            let progress = time - lastRender;
+
+            update(progress);
+            draw();
+
+            lastRender = time;
+            window.requestAnimationFrame(loop);
+        };
+
+        window.requestAnimationFrame(loop);
+    </script>
+</body>
+</html>
